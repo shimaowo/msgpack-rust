@@ -16,14 +16,17 @@ use rmp::{encode, Marker};
 
 use crate::config::{
     BinaryConfig, DefaultConfig, HumanReadableConfig, SerializerConfig, StructMapConfig,
-    StructTupleConfig
+    StructTupleConfig,
+    IntegerEnumConfig, StringEnumConfig
 };
 use crate::MSGPACK_EXT_STRUCT_NAME;
 
 /// This type represents all possible errors that can occur when serializing or
 /// deserializing MessagePack data.
 #[derive(Debug)]
-pub enum Error {
+pub
+enum Error
+{
     /// Failed to write a MessagePack value.
     InvalidValueWrite(ValueWriteError),
     //TODO: This can be removed at some point
@@ -254,6 +257,38 @@ impl<W: Write, C> Serializer<W, C> {
             config: BinaryConfig::new(config),
         }
     }
+
+    // smw edits
+
+    /// Consumes this serializer returning the new one, which will serialize enum variant
+    /// names as integers instead of full text.
+    ///
+    /// This was supposed to be the default configuration, but has been broken for a long time.
+    #[inline]
+    pub fn with_integer_enums(self) -> Serializer<W, IntegerEnumConfig<C>> {
+        let Serializer { wr, depth, config } = self;
+        Serializer {
+            wr,
+            depth,
+            config: IntegerEnumConfig::new(config),
+        }
+    }
+
+    /// Consumes this serializer returning the new one, which will serialize enum variant
+    /// names as full text instead of integers.
+    ///
+    /// This is the library default since some time ago, due to a bug that has never been addressed.
+    #[inline]
+    pub fn with_named_enums(self) -> Serializer<W, StringEnumConfig<C>> {
+        let Serializer { wr, depth, config } = self;
+        Serializer {
+            wr,
+            depth,
+            config: StringEnumConfig::new(config),
+        }
+    }
+
+    // smw end edits
 }
 
 impl<W: Write, C> UnderlyingWrite for Serializer<W, C> {

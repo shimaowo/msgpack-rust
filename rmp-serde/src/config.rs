@@ -60,7 +60,8 @@ mod sealed {
 //
 /// This is the most compact representation.
 #[derive(Copy, Clone, Debug)]
-pub struct DefaultConfig;
+pub
+struct DefaultConfig;
 
 impl sealed::SerializerConfig for DefaultConfig {
     fn write_struct_len<S>(ser: &mut S, len: usize) -> Result<(), Error>
@@ -93,6 +94,9 @@ impl sealed::SerializerConfig for DefaultConfig {
         S: UnderlyingWrite,
         for<'a> &'a mut S: Serializer<Ok = (), Error = Error>,
     {
+        // smw note - this is a bug, and/or different from the docs in multiple places
+        // but I'm leaving it untouched and instead introducing new configs and methods
+        // on Serializer to customize the behavior
         ser.serialize_str(variant)
     }
 
@@ -328,3 +332,103 @@ where
         false
     }
 }
+
+// smw edits
+
+/// Config wrapper that overrides enum serialization by writing the enum variant index instead of the name.
+#[derive(Copy, Clone, Debug)]
+pub struct IntegerEnumConfig<C>(C);
+
+impl<C> IntegerEnumConfig<C> {
+    /// Creates a `IntegerEnumConfig` inheriting unchanged configuration options from the given configuration.
+    #[inline]
+    pub fn new(inner: C) -> Self {
+        Self(inner)
+    }
+}
+
+impl<C> sealed::SerializerConfig for IntegerEnumConfig<C>
+where
+    C: sealed::SerializerConfig,
+{
+    fn write_struct_len<S>(ser: &mut S, len: usize) -> Result<(), Error>
+    where
+        S: UnderlyingWrite,
+        for<'a> &'a mut S: Serializer<Ok = (), Error = Error> {
+            C::write_struct_len(ser, len)
+    }
+
+    fn write_struct_field<S, T>(ser: &mut S, key: &'static str, value: &T) -> Result<(), Error>
+    where
+        S: UnderlyingWrite,
+        for<'a> &'a mut S: Serializer<Ok = (), Error = Error>,
+        T: ?Sized + Serialize {
+            C::write_struct_field(ser, key, value)
+    }
+
+    fn write_variant_ident<S>(
+        ser: &mut S,
+        variant_index: u32,
+        _variant: &'static str,
+    ) -> Result<(), Error>
+    where
+        S: UnderlyingWrite,
+        for<'a> &'a mut S: Serializer<Ok = (), Error = Error> {
+            // TODO: unsure if we should use encode::write* here to get a marker
+            // or if the bare number is sufficient
+            ser.serialize_u32(variant_index)
+    }
+
+    fn is_human_readable() -> bool {
+        C::is_human_readable()
+    }
+}
+
+/// Config wrapper that overrides enum serialization by writing the enum variant name instead of the index.
+#[derive(Copy, Clone, Debug)]
+pub struct StringEnumConfig<C>(C);
+
+impl<C> StringEnumConfig<C> {
+    /// Creates a `StringEnumConfig` inheriting unchanged configuration options from the given configuration.
+    #[inline]
+    pub fn new(inner: C) -> Self {
+        Self(inner)
+    }
+}
+
+impl<C> sealed::SerializerConfig for StringEnumConfig<C>
+where
+    C: sealed::SerializerConfig,
+{
+    fn write_struct_len<S>(ser: &mut S, len: usize) -> Result<(), Error>
+    where
+        S: UnderlyingWrite,
+        for<'a> &'a mut S: Serializer<Ok = (), Error = Error> {
+            C::write_struct_len(ser, len)
+    }
+
+    fn write_struct_field<S, T>(ser: &mut S, key: &'static str, value: &T) -> Result<(), Error>
+    where
+        S: UnderlyingWrite,
+        for<'a> &'a mut S: Serializer<Ok = (), Error = Error>,
+        T: ?Sized + Serialize {
+            C::write_struct_field(ser, key, value)
+    }
+
+    fn write_variant_ident<S>(
+        ser: &mut S,
+        _variant_index: u32,
+        variant: &'static str,
+    ) -> Result<(), Error>
+    where
+        S: UnderlyingWrite,
+        for<'a> &'a mut S: Serializer<Ok = (), Error = Error> {
+            ser.serialize_str(variant)
+    }
+
+    fn is_human_readable() -> bool {
+        C::is_human_readable()
+    }
+}
+
+// smw end edits
